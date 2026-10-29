@@ -9,6 +9,15 @@ const pct = (n) => (n < 10 ? n.toFixed(1) : Math.round(n)) + "%";
 const HUES = [355, 210, 140, 35, 275, 180, 60, 310, 20, 100];
 const color = (i, a = 0.3) => `hsl(${HUES[i % HUES.length]} 75% 55% / ${a})`;
 const level = (v, warn, bad) => (v >= bad ? "lvl-bad" : v >= warn ? "lvl-warn" : "lvl-good");
+// Inline message, because some embedded viewers block browser pop-up dialogs.
+function notify(msg, isError = true) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("error", isError);
+  t.hidden = false;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.hidden = true; }, 6000);
+}
 const BIG_TEXT = 1_500_000; // above this, keep file text out of the textarea so the page stays fast
 
 // ---------- file reading (all in the browser) ----------
@@ -59,7 +68,7 @@ async function readFiles(files, progressEl) {
       if (!text.trim()) throw new Error("no readable text (scanned image PDF?)");
       out.push({ name: f.name, text });
     } catch (e) {
-      alert(`Could not read ${f.name}: ${e.message}`);
+      notify(`Could not read ${f.name}: ${e.message}`);
     }
   }
   hideProgress(progressEl);
@@ -178,7 +187,7 @@ fetch("api/status").then((r) => r.json()).then((s) => {
 
 $("runCheck").onclick = async () => {
   const text = bigDoc ? bigDoc.text : $("docText").value;
-  if (!text.trim()) return alert("Paste some text or upload a file first.");
+  if (!text.trim()) return notify("Paste some text or upload a file first.");
   const doc = { name: bigDoc ? bigDoc.name : "Your document", text };
   const opts = { paraphrase: $("optParaphrase").checked };
   $("runCheck").disabled = true;
@@ -189,7 +198,7 @@ $("runCheck").onclick = async () => {
     if ($("optOnline").checked && onlineAvailable) runOnline(text, result.passages);
   } catch (e) {
     hideProgress($("checkProgress"));
-    alert("Check failed: " + e.message);
+    notify("Check failed: " + e.message);
   } finally {
     $("runCheck").disabled = false;
   }
@@ -245,7 +254,8 @@ function renderCheck(doc, r) {
       <div class="legend" id="legend"></div>
       <div class="doc-view" id="docView"></div>
       <div class="row"><button class="btn ghost" id="moreDoc" hidden>Show more</button>
-      <button class="btn ghost" id="dlReport">Download report</button></div></div>`;
+      <button class="btn ghost" id="dlReport">Download report</button>
+      <button class="btn ghost" id="copyReport">Copy report</button></div></div>`;
 
   if (s && s.passages.length) {
     const top = [...s.passages].sort((a, b) => b.words - a.words).slice(0, 200);
@@ -289,6 +299,9 @@ function renderCheck(doc, r) {
     render(e.target.dataset.v);
   };
   $("dlReport").onclick = () => downloadReport(doc, r);
+  $("copyReport").onclick = () => navigator.clipboard.writeText(reportText(doc, r))
+    .then(() => notify("Report copied to the clipboard.", false))
+    .catch(() => notify("Copying is blocked here. Use Download report instead."));
   el.querySelectorAll(".passage").forEach((pEl) => pEl.addEventListener("click", () => {
     if (current !== "src") $("viewSeg").querySelector("[data-v=src]").click();
     while (shown < +pEl.dataset.end) more();
@@ -344,7 +357,7 @@ async function runOnline(text, passages) {
   }
 }
 
-function downloadReport(doc, r) {
+function reportText(doc, r) {
   const L = [];
   L.push("PLAGIARISM & AI-WRITING REPORT", "Generated " + new Date().toLocaleString(), "Document: " + doc.name, "");
   if (r.sources) {
@@ -362,8 +375,12 @@ function downloadReport(doc, r) {
     L.push("MATCHED PASSAGES");
     for (const p of r.sources.passages) L.push("", `[${r.sources.perSource[p.source].name}, ${p.words} words]`, p.text);
   }
+  return L.join("\n");
+}
+
+function downloadReport(doc, r) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([L.join("\n")], { type: "text/plain" }));
+  a.href = URL.createObjectURL(new Blob([reportText(doc, r)], { type: "text/plain" }));
   a.download = "plagiarism-report.txt";
   a.click();
   URL.revokeObjectURL(a.href);
@@ -382,7 +399,7 @@ $("cmpList").addEventListener("click", (e) => {
 wireDrop($("cmpDrop"), async (files) => { batch.push(...await readFiles(files, $("cmpProgress"))); renderBatch(); });
 
 $("runCompare").onclick = async () => {
-  if (batch.length < 2) return alert("Add at least two files.");
+  if (batch.length < 2) return notify("Add at least two files.");
   $("runCompare").disabled = true;
   try {
     const r = await run("compareAll", { docs: batch, opts: { paraphrase: $("cmpParaphrase").checked } }, (l, f) => showProgress($("cmpProgress"), l, f));
@@ -390,7 +407,7 @@ $("runCompare").onclick = async () => {
     renderCompare(r);
   } catch (e) {
     hideProgress($("cmpProgress"));
-    alert("Compare failed: " + e.message);
+    notify("Compare failed: " + e.message);
   } finally {
     $("runCompare").disabled = false;
   }
