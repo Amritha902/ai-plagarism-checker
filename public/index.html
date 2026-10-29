@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Plagiarism Checker</title>
+  <meta name="description" content="Check text and large files for plagiarism and AI-written content.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div class="brand"><span class="logo" aria-hidden="true">◎</span> AI Plagiarism Checker</div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="check" role="tab">Check a document</button>
+        <button class="tab" data-tab="compare" role="tab">Compare many files</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- ============ CHECK ONE DOCUMENT ============ -->
+    <section id="tab-check" class="panel">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head">
+            <h2>1. Your document</h2>
+            <span class="muted" id="docCount">0 words</span>
+          </div>
+          <textarea id="docText" placeholder="Paste any amount of text here…"></textarea>
+          <label class="drop" id="docDrop">
+            <input type="file" id="docFile" hidden accept=".txt,.md,.pdf,.docx,.html,.htm,.csv,.json,.rtf,.tex,.py,.js,.ts,.java,.c,.cpp,.cs,.go,.rb,.php,.xml,text/*">
+            <strong>Drop a file</strong> or click to upload — PDF, Word (.docx), TXT, Markdown, HTML, code… any size
+          </label>
+          <div class="muted small" id="docFileName"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>2. Compare against <span class="muted">(optional)</span></h2>
+            <span class="muted" id="srcCount">0 sources</span>
+          </div>
+          <p class="muted small">Add the sources you suspect were copied: articles, other students' work, previous submissions. Add as many as you like.</p>
+          <ul id="srcList" class="src-list"></ul>
+          <div class="row">
+            <label class="btn ghost">
+              <input type="file" id="srcFiles" hidden multiple accept=".txt,.md,.pdf,.docx,.html,.htm,.csv,.json,.rtf,.tex,.py,.js,.ts,.java,.c,.cpp,.cs,.go,.rb,.php,.xml,text/*">
+              + Add files
+            </label>
+            <button class="btn ghost" id="srcPasteBtn">+ Paste text</button>
+          </div>
+          <div id="srcPasteBox" class="paste-box" hidden>
+            <input id="srcPasteName" placeholder="Source name (e.g. a URL or title)">
+            <textarea id="srcPasteText" placeholder="Paste the source text…"></textarea>
+            <div class="row"><button class="btn" id="srcPasteAdd">Add source</button><button class="btn ghost" id="srcPasteCancel">Cancel</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card options">
+        <label class="check"><input type="checkbox" id="optParaphrase" checked> Catch paraphrasing <span class="muted small">(ignores filler words and word endings)</span></label>
+        <label class="check"><input type="checkbox" id="optOnline"> Search the web + AI review with Claude <span class="muted small" id="onlineNote"></span></label>
+        <button class="btn primary" id="runCheck">Run check</button>
+      </div>
+
+      <div class="progress" id="checkProgress" hidden><div class="bar"></div><span class="label"></span></div>
+      <div id="checkResults" hidden></div>
+    </section>
+
+    <!-- ============ COMPARE MANY FILES ============ -->
+    <section id="tab-compare" class="panel" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Compare files with each other</h2>
+          <span class="muted" id="cmpCount">0 files</span>
+        </div>
+        <p class="muted small">Upload a whole batch (e.g. every submission for an assignment). Every pair is compared and the most similar pairs are listed first.</p>
+        <label class="drop" id="cmpDrop">
+          <input type="file" id="cmpFiles" hidden multiple accept=".txt,.md,.pdf,.docx,.html,.htm,.csv,.json,.rtf,.tex,.py,.js,.ts,.java,.c,.cpp,.cs,.go,.rb,.php,.xml,text/*">
+          <strong>Drop files</strong> or click to upload
+        </label>
+        <ul id="cmpList" class="src-list"></ul>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="cmpParaphrase" checked> Catch paraphrasing</label>
+          <button class="btn primary" id="runCompare">Compare</button>
+        </div>
+      </div>
+      <div class="progress" id="cmpProgress" hidden><div class="bar"></div><span class="label"></span></div>
+      <div id="cmpResults" hidden></div>
+    </section>
+
+    <footer class="muted small foot">
+      Files are read and compared in your browser — they are not uploaded. Only the optional web/AI check sends text to the server.
+      AI-writing scores are estimates, not proof; always review the highlighted passages yourself.
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

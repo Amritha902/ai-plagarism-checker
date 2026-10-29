@@ -1,0 +1,17 @@
+{
+  "name": "ai-plagiarism-checker",
+  "version": "1.0.0",
+  "description": "Plagiarism and AI-writing checker website: paste any amount of text or upload large files.",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "express": "^5.1.0"
+  }
+}
