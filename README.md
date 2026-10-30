@@ -1,5 +1,9 @@
 # AI Plagiarism Checker
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Amritha902/ai-plagarism-checker)
+
+**Step-by-step deployment guide, settings, costs and how the build works: [DEPLOY.md](DEPLOY.md).**
+
 A website that checks text and documents for plagiarism and AI-written content.
 You can paste any amount of text or upload large files (PDF, Word .docx, TXT,
 Markdown, HTML, RTF, source code). It was tested on a 30 MB file of 3.9 million
@@ -45,10 +49,20 @@ Each online check costs one Claude request with up to 10 web searches.
 
 ## Deploy
 
-Any Node host works (Render, Railway, Fly.io, a VPS): build command `npm install`,
-start command `npm start`, and set `ANTHROPIC_API_KEY` as an environment variable
-if you want the online check. The `public/` folder alone can also be hosted as a
-static site (GitHub Pages, Netlify); the online check is then unavailable.
+On Render: click the button above, paste your Anthropic API key when asked, and the
+site is live in a few minutes. Full instructions are in [DEPLOY.md](DEPLOY.md).
+
+Settings (environment variables):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | none | Turns on the web search + AI review |
+| `ACCESS_CODE` | none | If set, visitors must enter this code to use the web search |
+| `ONLINE_CHECKS_PER_HOUR` | `20` | Web searches allowed per visitor per hour |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Claude model for the web search |
+
+The `public/` folder alone can also be hosted as a static site (GitHub Pages, Netlify);
+the web search is then unavailable.
 
 ## Tests
 
@@ -64,4 +78,6 @@ npm test
 | `public/engine.js` | Matching and AI-style engine (word n-gram fingerprints) |
 | `public/worker.js` | Runs the engine off the main thread so large inputs never freeze the page |
 | `server.mjs` | Serves the site and the `/api/ai-check` endpoint (Claude + web search) |
+| `render.yaml` | Render Blueprint for one-click deployment |
+| `DEPLOY.md` | Deployment guide and build details |
 | `test/engine.test.cjs` | Engine tests |

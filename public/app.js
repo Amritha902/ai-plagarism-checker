@@ -180,6 +180,8 @@ fetch("api/status").then((r) => r.json()).then((s) => {
   $("onlineNote").textContent = s.ai ? "(sends the text to Claude; takes ~1 minute)" : "(off: the server has no ANTHROPIC_API_KEY)";
   $("optOnline").checked = s.ai;
   $("optOnline").disabled = !s.ai;
+  $("accessCode").hidden = !(s.ai && s.needsCode);
+  try { $("accessCode").value = localStorage.getItem("accessCode") || ""; } catch {}
 }).catch(() => {
   $("onlineNote").textContent = "(off: no server)";
   $("optOnline").disabled = true;
@@ -332,10 +334,11 @@ async function runOnline(text, passages) {
   card.innerHTML = `<div class="card"><h3>Web search + AI review</h3><p class="muted">Claude is searching the web for ${passages.length} sampled passages and reading the document… this usually takes under a minute.</p></div>`;
   lastOnline = null;
   try {
-    const res = await fetch("api/ai-check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 400_000), passages }) });
+    const res = await fetch("api/ai-check", { method: "POST", headers: { "content-type": "application/json", "x-access-code": $("accessCode").value }, body: JSON.stringify({ text: text.slice(0, 400_000), passages }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     lastOnline = data;
+    try { localStorage.setItem("accessCode", $("accessCode").value); } catch {}
     const matches = (data.matches || []).filter((m) => m.url);
     const real = matches.filter((m) => m.match !== "same topic only");
     $("onlineTile").innerHTML = `<div class="v ${level(real.length ? 100 * real.length / passages.length : 0, 10, 30)}">${real.length}/${passages.length}</div>

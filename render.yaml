@@ -1,0 +1,20 @@
+# Render Blueprint: Render reads this file when you create a "Blueprint" from the repo
+# (or click the Deploy to Render button in README.md). See DEPLOY.md.
+services:
+  - type: web
+    name: ai-plagiarism-checker
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/status
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ANTHROPIC_API_KEY # turns on "Search the web + AI review"; Render asks for it on first deploy
+        sync: false
+      - key: ACCESS_CODE # optional: visitors must type this code to use the web search
+        sync: false
+      - key: ONLINE_CHECKS_PER_HOUR
+        value: "20"
