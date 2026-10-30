@@ -4,6 +4,20 @@ This guide puts the AI Plagiarism Checker on the internet at an address like
 `https://ai-plagiarism-checker.onrender.com`, with the **Search the web + AI review**
 option switched on. It takes about 10 minutes and needs no coding.
 
+### Which version has which features
+
+| Feature | Render version (this guide) | claude.ai hosted page |
+|---|---|---|
+| Paste text, upload large PDF / Word / text files | yes | yes |
+| Match against your sources, highlighted passages | yes | yes |
+| Compare many files | yes | yes |
+| AI-writing estimate and heat-map | yes | yes |
+| Claude's AI review (verdict and reasons) | yes, on your API key | yes, on the viewer's own Claude account |
+| **Search the web for copied passages** | **yes** | no: claude.ai pages cannot reach other websites |
+| Download / copy report | yes | yes |
+
+The Render version is the only one with every feature.
+
 Contents
 
 1. [What you need](#1-what-you-need)
