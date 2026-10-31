@@ -21,43 +21,6 @@
     "what which who whom whose when where why how all any both each few more most other some"
   ).split(" "));
 
-  // Light suffix stripping so "analysed / analyses / analysing" collapse together.
-  function stem(w) {
-    if (w.length <= 4) return w;
-    for (const suf of ["ational", "ization", "fulness", "iveness", "ations", "ation", "ments", "ment",
-      "ingly", "edly", "ings", "ing", "ies", "ied", "ers", "est", "ly", "ed", "es", "er", "s"]) {
-      if (w.endsWith(suf) && w.length - suf.length >= 3) return w.slice(0, -suf.length);
-    }
-    return w;
-  }
-
-  const WORD_RE = /[\p{L}\p{N}]+(?:['’][\p{L}]+)?/gu;
-
-  /**
-   * Split text into words, keeping each word's character offsets so matches can be
-   * highlighted in the original text. In paraphrase mode stopwords are dropped and
-   * words are stemmed, which makes light rewording still match.
-   */
-  function tokenize(text, opts) {
-    const paraphrase = !!(opts && opts.paraphrase);
-    const words = [];
-    const starts = [];
-    const ends = [];
-    WORD_RE.lastIndex = 0;
-    let m;
-    while ((m = WORD_RE.exec(text)) !== null) {
-      let w = m[0].toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/['’]/g, "");
-      if (paraphrase) {
-        if (STOPWORDS.has(w)) continue;
-        w = stem(w);
-      }
-      words.push(w);
-      starts.push(m.index);
-      ends.push(m.index + m[0].length);
-    }
-    return { words, starts, ends };
-  }
-
   /** Shared vocabulary: word -> small integer id. */
   function Vocab() { this.map = new Map(); }
   Vocab.prototype.ids = function (words) {
@@ -69,6 +32,257 @@
     }
     return out;
   };
+
+  // Word groups that mean the same thing; reworded copies swap words within a group.
+  const SYNONYM_GROUPS = [
+    "show demonstrate illustrate reveal indicate display", "use utilize utilise employ apply",
+    "big large huge vast enormous massive", "small little tiny minor",
+    "important significant crucial vital essential critical", "help assist aid support",
+    "begin start commence initiate", "end finish conclude terminate",
+    "get obtain acquire gain receive", "make create produce generate build construct",
+    "change alter modify transform adjust", "increase rise grow expand boost raise",
+    "decrease reduce decline lower diminish drop", "quick fast rapid swift",
+    "many numerous several various multiple", "often frequently commonly regularly",
+    "whole entire total", "main primary principal chief major",
+    "need require necessitate", "think believe consider", "study research investigation analysis examination",
+    "result outcome consequence", "cause trigger induce", "method approach technique procedure",
+    "problem issue difficulty challenge", "idea concept notion", "area region zone",
+    "world globe planet", "people individuals persons humans", "child kid youngster",
+    "buy purchase", "try attempt", "allow permit enable", "keep retain maintain preserve",
+    "give provide offer supply", "find discover identify detect", "choose select pick",
+    "answer response reply", "however nevertheless nonetheless", "therefore thus hence consequently",
+    "additionally furthermore moreover", "because since", "approximately roughly around",
+    "enough sufficient adequate", "clear evident obvious apparent", "hard difficult tough",
+    "easy simple straightforward", "old ancient aged", "new novel recent modern",
+    "rich wealthy affluent", "poor impoverished", "happy glad pleased joyful", "sad unhappy sorrowful",
+    "danger risk hazard threat", "benefit advantage", "weakness drawback disadvantage",
+    "goal aim objective purpose", "part portion section segment component", "example instance",
+    "explain describe clarify", "discuss examine explore", "suggest propose recommend",
+    "affect influence impact", "occur happen arise", "travel move proceed",
+    "say state claim assert mention", "city town", "car vehicle automobile",
+    "job occupation employment profession", "evaporate vaporize", "precipitation rainfall",
+    "climb ascend", "cool chill", "fall descend", "earth ground land", "power energy",
+    "drive propel", "rise ascend", "pupil student learner", "teacher instructor educator",
+  ];
+
+  // Light suffix stripping so "analysed / analyses / analysing" collapse together.
+  function stem(w) {
+    if (w.length <= 4) return w;
+    for (const suf of ["ational", "ization", "fulness", "iveness", "ations", "ation", "ments", "ment",
+      "ingly", "edly", "ings", "ing", "ies", "ied", "ers", "est", "ly", "ed", "es", "er", "s"]) {
+      if (w.endsWith(suf) && w.length - suf.length >= 3) return w.slice(0, -suf.length);
+    }
+    return w;
+  }
+
+  const SYNONYMS = new Map();
+  for (const g of SYNONYM_GROUPS) {
+    const words = g.split(" ");
+    const canon = stem(words[0]);
+    for (const w of words) { if (!SYNONYMS.has(w)) SYNONYMS.set(w, canon); if (!SYNONYMS.has(stem(w))) SYNONYMS.set(stem(w), canon); }
+  }
+  function canonical(w) { return SYNONYMS.get(w) || SYNONYMS.get(stem(w)) || stem(w); }
+
+  // Letters from other alphabets that look like Latin ones. Swapping them in is a known
+  // trick to make copied text invisible to checkers; they are mapped back before matching.
+  // Keys are Cyrillic (\u04xx, \u05xx), Greek (\u03xx) and IPA (\u0261) letters.
+  const HOMOGLYPHS = new Map(Object.entries({
+    "\u0430": "a", "\u0435": "e", "\u043E": "o", "\u0440": "p", "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u0456": "i", "\u0458": "j", "\u0455": "s",
+    "\u0501": "d", "\u0261": "g", "\u04CF": "l", "\u04BB": "h", "\u051B": "q", "\u051D": "w", "\u03BF": "o", "\u03B1": "a", "\u03BD": "v", "\u03C1": "p",
+    "\u03B9": "i", "\u03BA": "k", "\u03C5": "u", "\u03B5": "e",
+  }));
+  const LATIN = /[a-z]/;
+  const INVISIBLE = /[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g;
+
+  // Words may contain invisible characters (another trick); they are kept inside the
+  // word here and removed from its normalized form, so offsets stay exact.
+  const WORD_RE = /[\p{L}\p{N}\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]+(?:['’][\p{L}]+)?/gu;
+
+  function normalizeWord(raw) {
+    let w = raw.replace(INVISIBLE, "").toLowerCase().normalize("NFKC");
+    if (LATIN.test(w)) {
+      let out = "";
+      for (const ch of w) out += HOMOGLYPHS.get(ch) || ch;
+      w = out;
+    }
+    return w.normalize("NFKD").replace(/[\u0300-\u036F]/g, "").replace(/['’]/g, "");
+  }
+
+  /**
+   * Split text into words, keeping each word's character offsets so matches can be
+   * highlighted in the original text. In paraphrase mode filler words are dropped and
+   * each word is reduced to its stem and synonym group, so light rewording still matches.
+   */
+  function tokenize(text, opts) {
+    const paraphrase = !!(opts && opts.paraphrase);
+    const words = [];
+    const starts = [];
+    const ends = [];
+    WORD_RE.lastIndex = 0;
+    let m;
+    while ((m = WORD_RE.exec(text)) !== null) {
+      let w = normalizeWord(m[0]);
+      if (!w) continue;
+      if (paraphrase) {
+        if (STOPWORDS.has(w)) continue;
+        w = canonical(w);
+      }
+      words.push(w);
+      starts.push(m.index);
+      ends.push(m.index + m[0].length);
+    }
+    return { words, starts, ends };
+  }
+
+  /** Invisible characters and look-alike letters hidden in the text. */
+  function disguiseScan(text) {
+    const invisible = (text.match(INVISIBLE) || []).length;
+    let lookalikes = 0;
+    WORD_RE.lastIndex = 0;
+    let m;
+    while ((m = WORD_RE.exec(text)) !== null) {
+      const w = m[0].toLowerCase();
+      if (!LATIN.test(w)) continue;
+      for (const ch of w) if (HOMOGLYPHS.has(ch)) lookalikes++;
+    }
+    return { invisible, lookalikes };
+  }
+
+  /** Character ranges the user chose to leave out: quotations and the reference list. */
+  function excludedRanges(text, opts) {
+    const ranges = [];
+    if (opts.excludeQuotes) {
+      const re = /"[^"\n]{15,}?"|“[^”]{15,}?”|«[^»]{15,}?»/g;
+      let m;
+      while ((m = re.exec(text)) !== null) ranges.push([m.index, m.index + m[0].length]);
+    }
+    let referencesAt = -1;
+    if (opts.excludeReferences) {
+      const re = /^\s*(references|bibliography|works cited|reference list|sources|literature cited)\s*:?\s*$/gim;
+      let m;
+      while ((m = re.exec(text)) !== null) if (m.index > text.length * 0.4) referencesAt = m.index;
+      if (referencesAt >= 0) ranges.push([referencesAt, text.length]);
+    }
+    return { ranges, referencesAt };
+  }
+
+  function markExcluded(tok, ranges) {
+    const ex = new Uint8Array(tok.starts.length);
+    for (const [a, b] of ranges) {
+      for (let i = lowerBound(tok.starts, a); i < tok.starts.length && tok.starts[i] < b; i++) ex[i] = 1;
+    }
+    return ex;
+  }
+
+  function lowerBound(arr, x) {
+    let lo = 0, hi = arr.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid] < x) lo = mid + 1; else hi = mid; }
+    return lo;
+  }
+
+  /** Sentence spans with offsets: runs of text ending in . ! ? or a line break. */
+  function sentenceSpans(text) {
+    const spans = [];
+    const re = /[^.!?\n]+(?:[.!?]+["”’)]*|\n|$)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (!m[0]) { re.lastIndex++; continue; }
+      const lead = m[0].length - m[0].trimStart().length;
+      const s = m.index + lead, e = m.index + m[0].trimEnd().length;
+      if (e > s) spans.push([s, e]);
+    }
+    return spans;
+  }
+
+  /** Content-word stems of a piece of text (filler removed, synonyms merged). */
+  function contentTerms(text) {
+    const out = [];
+    WORD_RE.lastIndex = 0;
+    let m;
+    while ((m = WORD_RE.exec(text)) !== null) {
+      const w = normalizeWord(m[0]);
+      if (!w || STOPWORDS.has(w) || w.length < 2) continue;
+      out.push(canonical(w));
+    }
+    return out;
+  }
+
+  /**
+   * Reworded copying: sentences whose meaning-bearing words largely match a source
+   * sentence even after synonyms are swapped and the order is changed. Scores each
+   * pair by cosine similarity of rare-word weights (TF-IDF), using an inverted index
+   * so huge sources are compared quickly.
+   */
+  function findReworded(doc, sources, docTok, owner, excluded, opts) {
+    const threshold = opts.rewordThreshold || 0.5;
+    const srcSents = []; // { s, start, end, terms }
+    const postings = new Map();
+    for (let s = 0; s < sources.length; s++) {
+      for (const [a, b] of sentenceSpans(sources[s].text)) {
+        const terms = [...new Set(contentTerms(sources[s].text.slice(a, b)))];
+        if (terms.length < 4) continue;
+        const id = srcSents.length;
+        srcSents.push({ s, start: a, end: b, terms });
+        for (const t of terms) { let p = postings.get(t); if (!p) postings.set(t, (p = [])); p.push(id); }
+      }
+    }
+    if (!srcSents.length) return [];
+    const N = srcSents.length;
+    const idf = (t) => Math.log(1 + N / ((postings.get(t) || []).length + 1));
+    const maxDf = Math.max(50, N * 0.05);
+    const norm = new Float64Array(N);
+    for (let i = 0; i < N; i++) { let x = 0; for (const t of srcSents[i].terms) x += idf(t) ** 2; norm[i] = Math.sqrt(x); }
+
+    const found = [];
+    for (const [a, b] of sentenceSpans(doc.text)) {
+      const i0 = lowerBound(docTok.starts, a);
+      let i1 = i0;
+      while (i1 < docTok.starts.length && docTok.starts[i1] < b) i1++;
+      const n = i1 - i0;
+      if (n < 4) continue;
+      let already = 0, ex = 0;
+      for (let i = i0; i < i1; i++) { if (owner[i] !== -1) already++; if (excluded[i]) ex++; }
+      if (already >= n * 0.6 || ex >= n * 0.5) continue;
+
+      const terms = [...new Set(contentTerms(doc.text.slice(a, b)))];
+      if (terms.length < 4) continue;
+      const score = new Map();
+      for (const t of terms) {
+        const p = postings.get(t);
+        if (!p || p.length > maxDf) continue;
+        const w = idf(t);
+        for (const id of p) score.set(id, (score.get(id) || 0) + w);
+      }
+      if (!score.size) continue;
+      const cands = [...score.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5);
+      let dn = 0;
+      for (const t of terms) dn += idf(t) ** 2;
+      dn = Math.sqrt(dn);
+      let best = null;
+      for (const [id] of cands) {
+        const src = srcSents[id];
+        const set = new Set(src.terms);
+        let dot = 0, shared = 0;
+        for (const t of terms) if (set.has(t)) { dot += idf(t) ** 2; shared++; }
+        const sim = dot / (dn * norm[id]);
+        if (shared >= 4 && sim >= threshold && (!best || sim > best.sim)) best = { id, sim };
+      }
+      if (!best) continue;
+      const src = srcSents[best.id];
+      for (let i = i0; i < i1; i++) if (owner[i] === -1 && !excluded[i]) owner[i] = src.s;
+      found.push({
+        kind: "reworded",
+        source: src.s,
+        similarity: Math.round(best.sim * 100),
+        words: n,
+        start: a,
+        end: b,
+        text: doc.text.slice(a, b),
+        sourceText: sources[src.s].text.slice(src.start, src.end),
+      });
+    }
+    return found;
+  }
 
   /** Hash of k consecutive word ids, as a float that is exact up to 2^53. */
   function shingleHashes(ids, k) {
@@ -90,12 +304,14 @@
 
   /**
    * Compare one document against any number of sources.
-   * doc / sources: { name, text }.  Returns overall %, per-source %, matched passages
-   * with their source excerpts, and highlight spans for the document.
+   * doc / sources: { name, text }.  opts: paraphrase, excludeQuotes, excludeReferences,
+   * minWords (shortest exact match reported). Returns overall %, exact and reworded %,
+   * per-source %, and every matched passage with the source wording beside it.
    */
   function compareToSources(doc, sources, opts) {
     opts = opts || {};
     const k = opts.k || (opts.paraphrase ? 4 : 5);
+    const minWords = Math.max(k, opts.minWords || 0);
     const progress = opts.onProgress || function () {};
     const vocab = new Vocab();
 
@@ -103,7 +319,7 @@
     const index = new Map();
     const srcTok = [];
     for (let s = 0; s < sources.length; s++) {
-      progress("Indexing " + sources[s].name, s / Math.max(1, sources.length) * 0.5);
+      progress("Indexing " + sources[s].name, s / Math.max(1, sources.length) * 0.4);
       const tok = tokenize(sources[s].text, opts);
       srcTok.push(tok);
       const hashes = shingleHashes(vocab.ids(tok.words), k);
@@ -117,24 +333,25 @@
       }
     }
 
-    progress("Scanning document", 0.5);
+    progress("Scanning document", 0.4);
     const tok = tokenize(doc.text, opts);
     const n = tok.words.length;
+    const { ranges, referencesAt } = excludedRanges(doc.text, opts);
+    const excluded = markExcluded(tok, ranges);
     const hashes = shingleHashes(vocab.ids(tok.words), k);
     const owner = new Int32Array(n).fill(-1);     // which source a matched word is attributed to
     const ownerPos = new Int32Array(n).fill(-1);  // matching word position inside that source
-    const covered = new Float64Array(sources.length);
-    const lastEnd = new Int32Array(sources.length).fill(-1);
 
     for (let i = 0; i < hashes.length; i++) {
       const hit = index.get(hashes[i]);
       if (hit === undefined) continue;
+      let skip = false;
+      for (let j = 0; j < k; j++) if (excluded[i + j]) { skip = true; break; }
+      if (skip) continue;
       const codes = typeof hit === "number" ? [hit] : hit;
       for (const code of codes) {
         const s = Math.floor(code / POS_BITS);
         const p = code - s * POS_BITS;
-        covered[s] += (i + k) - Math.max(i, lastEnd[s]);
-        lastEnd[s] = i + k;
         for (let j = 0; j < k; j++) {
           // First source to claim a word keeps it, so passages stay contiguous.
           if (owner[i + j] === -1) {
@@ -143,42 +360,68 @@
           }
         }
       }
-      if ((i & 0xffff) === 0) progress("Scanning document", 0.5 + 0.45 * i / hashes.length);
+      if ((i & 0xffff) === 0) progress("Scanning document", 0.4 + 0.3 * i / hashes.length);
     }
 
-    // Collapse matched words into passages (runs owned by one source).
+    // Collapse matched words into passages (runs owned by one source); drop tiny ones.
     const passages = [];
-    let matched = 0;
     for (let i = 0; i < n;) {
       if (owner[i] === -1) { i++; continue; }
       const s = owner[i];
       let j = i;
       while (j + 1 < n && owner[j + 1] === s) j++;
-      matched += j - i + 1;
-      const st = srcTok[s];
-      const ps = Math.max(0, Math.min(ownerPos[i], st.starts.length - 1));
-      const pe = Math.max(ps, Math.min(ownerPos[j], st.ends.length - 1));
-      passages.push({
-        source: s,
-        words: j - i + 1,
-        start: tok.starts[i],
-        end: tok.ends[j],
-        text: doc.text.slice(tok.starts[i], tok.ends[j]),
-        sourceText: sources[s].text.slice(st.starts[ps], st.ends[pe]),
-      });
+      if (j - i + 1 < minWords) {
+        for (let x = i; x <= j; x++) owner[x] = -1;
+      } else {
+        const st = srcTok[s];
+        const ps = Math.max(0, Math.min(ownerPos[i], st.starts.length - 1));
+        const pe = Math.max(ps, Math.min(ownerPos[j], st.ends.length - 1));
+        passages.push({
+          kind: "exact",
+          source: s,
+          words: j - i + 1,
+          start: tok.starts[i],
+          end: tok.ends[j],
+          text: doc.text.slice(tok.starts[i], tok.ends[j]),
+          sourceText: sources[s].text.slice(st.starts[ps], st.ends[pe]),
+        });
+      }
       i = j + 1;
+    }
+    progress("Looking for reworded sentences", 0.75);
+    const reworded = opts.reworded === false ? [] : findReworded(doc, sources, tok, owner, excluded, opts);
+    // A short exact phrase inside a reworded sentence is part of that sentence's match.
+    const kept = reworded.length
+      ? passages.filter((p) => !reworded.some((r) => p.start >= r.start && p.end <= r.end))
+      : passages.slice();
+    let exactWords = 0;
+    for (const p of kept) exactWords += p.words;
+    passages.length = 0;
+    passages.push(...kept, ...reworded);
+    passages.sort((a, b) => a.start - b.start);
+
+    const perCount = new Float64Array(sources.length);
+    let matched = 0, excludedWords = 0;
+    for (let i = 0; i < n; i++) {
+      if (owner[i] !== -1) { matched++; perCount[owner[i]]++; }
+      if (excluded[i]) excludedWords++;
     }
 
     progress("Done", 1);
+    const pctOf = (x) => (n ? (100 * x) / n : 0);
     return {
       words: n,
       matchedWords: matched,
-      percent: n ? (100 * matched) / n : 0,
+      percent: pctOf(matched),
+      exactPercent: pctOf(exactWords),
+      rewordedPercent: pctOf(matched - exactWords),
+      excludedWords,
+      referencesExcluded: referencesAt >= 0,
       k,
       perSource: sources.map((src, s) => ({
         name: src.name,
         words: srcTok[s].words.length,
-        percent: n ? Math.min(100, (100 * covered[s]) / n) : 0,
+        percent: pctOf(perCount[s]),
         passages: passages.filter((p) => p.source === s).length,
       })),
       passages,
@@ -365,18 +608,39 @@
     return out;
   }
 
-  /** Spread-out, distinctive passages to look up online (for very large docs too). */
+  /**
+   * Passages to look up online: the document is cut into `count` equal stretches and
+   * the most distinctive sentence of each is picked (long words, names, numbers),
+   * since generic sentences match thousands of unrelated pages.
+   */
   function samplePassages(text, count, wordsEach) {
     const sentences = splitSentences(text).filter((s) => s.split(" ").length >= 10);
     if (!sentences.length) return [];
+    const distinct = (s) => {
+      const ws = s.split(" ");
+      let score = 0;
+      for (let i = 0; i < ws.length; i++) {
+        const w = ws[i].replace(/[^\p{L}\p{N}]/gu, "");
+        if (w.length >= 8) score += 1;
+        if (/\d/.test(w)) score += 1.5;
+        if (i > 0 && /^\p{Lu}/u.test(w)) score += 1.5;
+        if (STOPWORDS.has(w.toLowerCase())) score -= 0.3;
+      }
+      return score / Math.sqrt(ws.length);
+    };
     const picks = [];
-    const step = sentences.length / Math.min(count, sentences.length);
-    for (let i = 0; i < Math.min(count, sentences.length); i++) {
-      const s = sentences[Math.floor(i * step + step / 2)] || sentences[Math.floor(i * step)];
-      picks.push(s.split(" ").slice(0, wordsEach).join(" "));
+    const n = Math.min(count, sentences.length);
+    const step = sentences.length / n;
+    for (let i = 0; i < n; i++) {
+      let best = null, bestScore = -Infinity;
+      for (let j = Math.floor(i * step); j < Math.floor((i + 1) * step); j++) {
+        const sc = distinct(sentences[j]);
+        if (sc > bestScore) { bestScore = sc; best = sentences[j]; }
+      }
+      if (best) picks.push(best.split(" ").slice(0, wordsEach).join(" "));
     }
     return picks;
   }
 
-  return { tokenize, compareToSources, compareAll, selfRepetition, aiSignals, aiByParagraph, samplePassages, splitSentences };
+  return { tokenize, disguiseScan, compareToSources, compareAll, selfRepetition, aiSignals, aiByParagraph, samplePassages, splitSentences };
 });

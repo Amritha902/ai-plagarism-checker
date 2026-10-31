@@ -223,12 +223,38 @@ the server, which passes it to Anthropic and does not store it.
 
 ## 10. How the checks work
 
-**Matching your sources.** Every document is split into words. Each run of 5 consecutive
-words (a "shingle") gets a fingerprint. Any shingle in your document that also appears in
-a source marks those words as copied, and neighbouring copied words are joined into
-passages. *Catch paraphrasing* drops filler words ("the", "of", "is"…) and word endings
-("analysed" → "analys"), and uses runs of 4, so light rewording still matches. The
-percentage is the share of your document's words covered by matches.
+**Matching your sources.** Three layers, all in the visitor's browser:
+
+1. *Exact copying.* Every document is split into words. Each run of 5 consecutive
+   words (a "shingle") gets a fingerprint, and any shingle in your document that also
+   appears in a source marks those words as copied. Neighbouring copied words are joined
+   into passages; passages shorter than the *Ignore matches under N words* setting
+   (default 8) are dropped, so common phrases do not inflate the score.
+2. *Light rewording* (*Catch paraphrasing*). Before fingerprinting, filler words
+   ("the", "of", "is"…) are dropped, words are cut to their stem ("analysed" → "analys"),
+   and about 90 groups of synonyms are merged ("show / demonstrate / illustrate",
+   "use / utilize / employ", "reduce / lower / decrease"…), with runs of 4 words.
+3. *Reworded sentences.* Each sentence of your document is compared with the source
+   sentences that share its rarest words (an inverted index keeps this fast on huge
+   files). Similarity is the cosine of rare-word weights (TF-IDF), so swapping synonyms
+   and reordering the sentence does not hide it. Pairs scoring 50% or more, with at least
+   4 shared meaning words, are shown as **Reworded** with a dashed underline.
+   With the web search / AI review on, Claude reads the 8 strongest reworded pairs and
+   says for each whether it really is a paraphrase.
+
+**Disguise tricks.** Invisible characters (zero-width spaces, soft hyphens) and letters
+from other alphabets that look like English ones (Cyrillic "а", Greek "ο"…) are a known
+way to make copied text invisible to checkers. They are converted back before matching,
+and the page warns when it finds them. Genuine Russian or Greek text is left alone.
+
+**Skipping quotations and the bibliography.** *Skip quotations* leaves text inside
+quotation marks out of the score (properly quoted material is not plagiarism).
+*Skip bibliography* (on by default) leaves out everything after a "References",
+"Bibliography" or "Works Cited" heading in the last 60% of the document.
+
+**Web search.** The document is cut into 12 stretches and the most distinctive sentence
+of each (long words, names, numbers) is searched, since generic sentences match
+thousands of unrelated pages.
 
 **Compare many files.** Every file gets a set of fingerprints; for each pair the page
 shows how much of A appears in B, of B in A, and overall overlap. Very large batches
@@ -242,8 +268,8 @@ transition words, and vocabulary variety. They are combined into a 0–100% scor
 an estimate, not proof: formal human writing can score high, and edited AI text can
 score low.
 
-**Web search + AI review.** The server sends Claude 12 passages spread across the whole
-document and the document text (first ~400,000 characters). Claude searches the web for
+**Web search + AI review.** The server sends Claude the 12 distinctive passages and the
+document text (first ~400,000 characters). Claude searches the web for
 the most distinctive passages, reports pages containing the same or closely paraphrased
 wording, and gives its own judgement on whether the text is AI-written, with reasons.
 The text is treated strictly as data: instructions hidden inside a document are ignored.

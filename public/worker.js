@@ -14,6 +14,7 @@ self.onmessage = (e) => {
         ai: PlagEngine.aiSignals(payload.doc.text),
         aiParagraphs: PlagEngine.aiByParagraph(payload.doc.text),
         passages: PlagEngine.samplePassages(payload.doc.text, 12, 30),
+        disguise: PlagEngine.disguiseScan(payload.doc.text),
       };
     } else if (task === "compareAll") {
       result = PlagEngine.compareAll(payload.docs, { ...payload.opts, onProgress });

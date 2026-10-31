@@ -13,7 +13,8 @@ words.
 
 | Check | How |
 |---|---|
-| **Copying from your sources** | Add any number of source files or pasted texts. Every run of 5 identical words (4 content words in *Catch paraphrasing* mode) is matched, highlighted in the document in the source's colour, and listed side by side with the source wording. |
+| **Copying from your sources** | Add any number of source files or pasted texts. Finds exact copying (runs of identical words), light rewording (stems and synonyms merged) and reworded sentences (synonym swaps and new word order, scored by rare-word similarity). Matches are highlighted in the source's colour and listed beside the source wording. Quotations and the bibliography can be left out, and tiny matches ignored. |
+| **Disguise tricks** | Invisible characters and look-alike letters from other alphabets, used to slip copied text past checkers, are undone before matching and reported. |
 | **Found online** *(optional)* | Twelve passages sampled across the whole document are searched on the web by Claude (web search tool), which reports the pages where the wording appears. |
 | **AI-writing estimate** | Style heuristics: sentence-length uniformity, stock AI phrases ("delve", "it is important to note", "furthermore"…), contractions, transition-word openers, vocabulary variety. An AI heat-map shows which parts read as machine-written. With the online check on, Claude also gives its own verdict and reasons. |
 | **Repeated within itself** | Passages of 8+ words that appear more than once (padding). |

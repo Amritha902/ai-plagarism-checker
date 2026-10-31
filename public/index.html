@@ -58,7 +58,11 @@
       </div>
 
       <div class="card options">
-        <label class="check"><input type="checkbox" id="optParaphrase" checked> Catch paraphrasing <span class="muted small">(ignores filler words and word endings)</span></label>
+        <label class="check"><input type="checkbox" id="optParaphrase" checked> Catch paraphrasing <span class="muted small">(synonyms, word endings, reordered sentences)</span></label>
+        <label class="check"><input type="checkbox" id="optQuotes"> Skip quotations</label>
+        <label class="check"><input type="checkbox" id="optRefs" checked> Skip bibliography</label>
+        <label class="check">Ignore matches under
+          <select id="optMinWords"><option value="5">5</option><option value="8" selected>8</option><option value="12">12</option><option value="20">20</option></select> words</label>
         <label class="check"><input type="checkbox" id="optOnline"> <span id="optOnlineLabel">Search the web + AI review with Claude</span> <span class="muted small" id="onlineNote"></span></label>
         <input type="password" id="accessCode" class="code-input" placeholder="Access code" autocomplete="off" hidden>
         <button class="btn primary" id="runCheck">Run check</button>

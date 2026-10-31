@@ -150,3 +150,11 @@ a { color: var(--accent); }
 .toast.error { border-color: var(--bad); color: var(--bad); }
 .btn:focus-visible, .tab:focus-visible, .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .options .code-input { width: 160px; padding: 6px 10px; }
+.options select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; }
+.doc-view mark.rw { background: transparent !important; border-bottom: 2px dashed var(--warn); border-radius: 0; }
+.tag.kind { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.tag.kind.rw { color: var(--warn); border-color: var(--warn); }
+.verdict { margin-top: 8px; font-size: .88rem; }
+.verdict b.yes { color: var(--bad); } .verdict b.no { color: var(--good); }
+.alert-card { border-color: var(--bad); }
+.alert-card h3 { color: var(--bad); }

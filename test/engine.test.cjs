@@ -73,3 +73,64 @@ test("AI heuristics separate stock LLM prose from casual writing", () => {
 test("short text returns no AI score", () => {
   assert.strictEqual(E.aiSignals("Too short.").score, null);
 });
+
+const source2 =
+  "Researchers demonstrated that regular exercise significantly reduces the risk of heart disease in older adults. " +
+  "The study followed 4,000 participants across twelve hospitals for a decade.";
+
+test("reworded sentence with synonyms and new word order is caught", () => {
+  const doc = "My essay starts here with my own thoughts on the matter. " +
+    "In older adults, the risk of heart disease is considerably lowered by regular exercise, researchers showed. " +
+    "Then I write about something else entirely, like my holiday in Spain.";
+  const r = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: source2 }]);
+  const rw = r.passages.filter((p) => p.kind === "reworded");
+  assert.strictEqual(rw.length, 1, JSON.stringify(r.passages));
+  assert.ok(rw[0].text.startsWith("In older adults"));
+  assert.ok(rw[0].sourceText.startsWith("Researchers demonstrated"));
+  assert.ok(r.rewordedPercent > 0 && r.exactPercent === 0);
+});
+
+test("unrelated sentences on the same topic are not flagged as reworded", () => {
+  const doc = "Exercise is something many older people enjoy at the weekend with friends. " +
+    "Hospitals are busy places where doctors work long hours every single day.";
+  const r = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: source2 }]);
+  assert.strictEqual(r.passages.length, 0, JSON.stringify(r.passages));
+});
+
+test("look-alike letters and invisible characters do not hide copying", () => {
+  const disguised = original.replace(/a/g, "а").replace(/o/g, "о").replace(/ /g, " ​");
+  const r = E.compareToSources({ name: "d", text: disguised }, [{ name: "s", text: original }]);
+  assert.ok(r.exactPercent > 90, "exact " + r.exactPercent);
+  const d = E.disguiseScan(disguised);
+  assert.ok(d.lookalikes > 20 && d.invisible > 20);
+  assert.deepStrictEqual(E.disguiseScan(original), { invisible: 0, lookalikes: 0 });
+});
+
+test("genuine Cyrillic text is left alone", () => {
+  assert.deepStrictEqual(E.disguiseScan("Привет, как дела? Это обычный русский текст."), { invisible: 0, lookalikes: 0 });
+});
+
+test("quotations and the reference list can be excluded", () => {
+  const doc = 'As the textbook puts it, "' + original + '" That is my opening. ' +
+    "Now some original discussion follows here at length about rivers and lakes and seas.\n\nReferences\n" + original;
+  const withAll = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: original }]);
+  const without = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: original }], { excludeQuotes: true, excludeReferences: true });
+  assert.ok(withAll.percent > 50);
+  assert.strictEqual(without.percent, 0);
+  assert.ok(without.referencesExcluded);
+});
+
+test("matches shorter than the minimum are ignored", () => {
+  const doc = "Unrelated words then water evaporates from the surface of the earth and nothing more.";
+  const loose = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: original }], { minWords: 5, reworded: false });
+  const strict = E.compareToSources({ name: "d", text: doc }, [{ name: "s", text: original }], { minWords: 12, reworded: false });
+  assert.ok(loose.passages.length === 1 && strict.passages.length === 0);
+});
+
+test("web passages favour distinctive sentences", () => {
+  const text = Array.from({ length: 30 }, (_, i) => i === 7
+    ? "The Hubble Space Telescope photographed galaxy NGC 4414 in 1995 at extraordinary resolution."
+    : "This is a fairly ordinary sentence that says very little of anything at all.").join(" ");
+  const picks = E.samplePassages(text, 3, 30);
+  assert.ok(picks.some((p) => p.includes("Hubble")));
+});
